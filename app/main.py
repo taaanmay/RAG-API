@@ -1,6 +1,7 @@
 import os
 from fastapi import FastAPI, HTTPException, Request
 from dotenv import load_dotenv
+from contextlib import asynccontextmanager
 
 # Load environment variables from your .env file
 load_dotenv()
@@ -15,17 +16,9 @@ INDEX_PATH = os.path.join(PROJECT_ROOT, "data", "vector_store", "faiss.index")
 MAPPING_PATH = os.path.join(PROJECT_ROOT, "data", "vector_store", "chunk_mapping.pkl")
 EMBEDDING_MODEL_NAME = 'all-MiniLM-L6-v2'
 
-# Initialize FastAPI app
-app = FastAPI(
-    title="RAG API",
-    description="An API for Retrieval-Augmented Generation using FastAPI and OpenAI",
-    version="1.0.0"
-)
-
-# --- FastAPI Events ---
-
-@app.on_event("startup")
-async def startup_event():
+# --- Lifespan Handler ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     """
     Initializes the RAG system on application startup.
     The RAG instance is stored in the app's state for access across requests.
@@ -46,10 +39,22 @@ async def startup_event():
     )
     print("RAG system initialized successfully.")
 
+    yield  # Application is running
+
+    # Optional: Cleanup actions (if needed)
+    print("Application shutdown.")
+
+# Initialize FastAPI app with lifespan
+app = FastAPI(
+    title="RAG API",
+    description="An API for Retrieval-Augmented Generation using FastAPI and OpenAI",
+    version="1.0.0",
+    lifespan=lifespan
+)
 
 # --- API Endpoints ---
 
-@app.post("/query", response_model=QueryResponse)
+@app.post("/query")
 async def query_rag(request: Request, query: QueryRequest):
     """
     Endpoint to handle RAG queries. It retrieves the initialized RAG system
@@ -60,7 +65,8 @@ async def query_rag(request: Request, query: QueryRequest):
     
     try:
         response = rag_system.get_rag_response(query)
-        return response
+        print(response.answer)
+        return response.answer
     except Exception as e:
         print(f"Error during query processing: {e}")
         raise HTTPException(status_code=500, detail="An internal error occurred.")
